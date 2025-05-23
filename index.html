@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exploring Diffusion Large Language Models</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
+        .section-title { @apply text-3xl font-bold text-teal-700 mb-6 mt-10; }
+        .subsection-title { @apply text-2xl font-semibold text-teal-600 mb-4 mt-6; }
+        .card { @apply bg-white p-6 rounded-xl shadow-lg transition-all duration-300 ease-in-out; }
+        .card-hover { @apply hover:shadow-xl hover:scale-105; }
+        .tab-button { @apply px-4 py-2 rounded-t-lg font-medium transition-colors duration-200; }
+        .tab-button.active { @apply bg-teal-600 text-white; }
+        .tab-button:not(.active) { @apply bg-stone-200 text-stone-700 hover:bg-stone-300; }
+        .filter-button { @apply px-3 py-1 bg-sky-500 text-white rounded-md text-sm hover:bg-sky-600 transition-colors; }
+        .gemini-button { @apply ml-0 mt-2 md:ml-2 md:mt-0 px-3 py-1 bg-purple-600 text-white rounded-md text-xs hover:bg-purple-700 transition-colors inline-flex items-center; }
+        .details { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-out; }
+        .details.open { max-height: 1000px; /* Adjust as needed */ }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; height: 350px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 400px; } }
+
+        .sticky-nav {
+            position: -webkit-sticky; /* Safari */
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .nav-link { @apply px-3 py-2 text-stone-700 hover:text-teal-600 font-medium transition-colors; }
+        .nav-link.active-link { @apply text-teal-600 border-b-2 border-teal-600; }
+        .text-animation-box { @apply p-4 border border-stone-300 rounded-lg bg-stone-50 min-h-[50px] text-center font-mono text-sm md:text-base; }
+        
+        .modal { @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]; }
+        .modal-content { @apply bg-white p-6 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto; }
+        .modal-title { @apply text-xl font-semibold text-teal-700 mb-4; }
+        .modal-body { @apply text-stone-700 mb-4 whitespace-pre-wrap; }
+        .modal-close-btn { @apply px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors; }
+        .hidden { display: none; }
+        .loader {
+            border: 4px solid #f3f3f3; 
+            border-top: 4px solid #5EEAD4; /* teal-300 */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-stone-100 text-stone-800">
+
+    <header class="bg-white shadow-md sticky-nav">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <h1 class="text-2xl font-bold text-teal-700">Diffusion LLMs Explorer</h1>
+                <nav class="hidden md:flex space-x-1" id="desktop-nav">
+                    <a href="#introduction" class="nav-link">Intro</a>
+                    <a href="#core-concepts" class="nav-link">Core</a>
+                    <a href="#diffusion-for-text" class="nav-link">Text</a>
+                    <a href="#research-models" class="nav-link">Research</a>
+                    <a href="#control-conditioning" class="nav-link">Control</a>
+                    <a href="#evaluation" class="nav-link">Eval</a>
+                    <a href="#challenges-future" class="nav-link">Future</a>
+                    <a href="#resources" class="nav-link">Learn</a>
+                </nav>
+                <button id="mobile-menu-button" class="md:hidden text-stone-700 hover:text-teal-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                </button>
+            </div>
+        </div>
+        <div id="mobile-menu" class="hidden md:hidden bg-white shadow-lg">
+            <a href="#introduction" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Introduction</a>
+            <a href="#core-concepts" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Core Concepts</a>
+            <a href="#diffusion-for-text" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Diffusion for Text</a>
+            <a href="#research-models" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Research & Models</a>
+            <a href="#control-conditioning" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Control</a>
+            <a href="#evaluation" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Evaluation</a>
+            <a href="#challenges-future" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Challenges & Future</a>
+            <a href="#resources" class="block px-4 py-3 text-stone-700 hover:bg-stone-50 hover:text-teal-600">Learning Resources</a>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <section id="introduction" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Welcome to Diffusion LLMs</h2>
+            <p class="text-lg text-stone-700 mb-4">
+                This interactive guide explores Diffusion Large Language Models (Diffusion LLMs), a rapidly evolving class of generative AI. Diffusion models, inspired by thermodynamics, learn to generate data by reversing a gradual noising process. Initially successful in image synthesis, they are now being adapted for the complexities of natural language.
+            </p>
+            <p class="text-stone-600">
+                Here, you'll discover their core mechanics, how they're tailored for text, key research breakthroughs, notable models, evaluation techniques, current challenges, and future prospects. Our goal is to make this complex topic accessible and engaging.
+            </p>
+        </section>
+
+        <section id="core-concepts" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Core Concepts of Diffusion Models</h2>
+            <p class="text-stone-700 mb-6">
+                Diffusion models operate on a two-stage principle: a **forward process** that systematically adds noise to data until it becomes indistinguishable from random noise, and a **reverse process** where a model learns to denoise it step-by-step, effectively generating new data.
+            </p>
+
+            <div class="grid md:grid-cols-2 gap-8 mb-8">
+                <div>
+                    <h3 class="subsection-title">The Forward & Reverse Process</h3>
+                    <p class="text-stone-600 mb-2">Observe a conceptual animation of how data is noised and then reconstructed:</p>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="font-semibold mb-1 text-teal-700">Forward Process (Adding Noise):</p>
+                            <div id="forward-process-animation" class="text-animation-box">Original Data</div>
+                        </div>
+                        <div>
+                            <p class="font-semibold mb-1 text-teal-700">Reverse Process (Denoising to Generate):</p>
+                            <div id="reverse-process-animation" class="text-animation-box">Pure Noise</div>
+                        </div>
+                    </div>
+                    <button id="animate-diffusion-btn" class="mt-4 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors">Run Animation</button>
+                    <p class="text-xs text-stone-500 mt-2">This is a simplified conceptual representation of the iterative noising and denoising.</p>
+                </div>
+                <div>
+                    <h3 class="subsection-title">Mathematical Foundations</h3>
+                    <div class="text-stone-600 mb-4">
+                        <p class="mb-2">Two main frameworks underpin diffusion models:</p>
+                        <div id="ddpm-concept" class="mb-3 p-3 border border-stone-200 rounded-md bg-stone-50">
+                            <strong class="block mb-1">Denoising Diffusion Probabilistic Models (DDPMs):</strong> Discrete-time formulation. The forward process adds Gaussian noise ($\mathcal{N}(x_t; \sqrt{1 - \beta_t}x_{t-1}, \beta_tI)$), and the reverse process learns to predict this noise or the denoised data, often by minimizing Mean Squared Error (MSE) between predicted and actual noise.
+                            <button class="gemini-button explain-concept-btn" data-concept-id="ddpm-concept" data-concept-name="DDPMs">✨ Explain Simply</button>
+                        </div>
+                        <div id="sde-concept" class="p-3 border border-stone-200 rounded-md bg-stone-50">
+                            <strong class="block mb-1">Score-Based Generative Models (via SDEs):</strong> Continuous-time formulation using Stochastic Differential Equations. The model learns the "score function" (gradient of the log data density, $\nabla_x \log p(x)$) to guide the reverse SDE from noise to data.
+                            <button class="gemini-button explain-concept-btn" data-concept-id="sde-concept" data-concept-name="Score-Based Models (SDEs)">✨ Explain Simply</button>
+                        </div>
+                    </div>
+                     <p class="text-stone-600 mt-4">
+                        The SDE framework provides a unifying perspective, encompassing DDPMs and enabling advanced sampling techniques.
+                    </p>
+                </div>
+            </div>
+
+            <h3 class="subsection-title">Comparison with Other Generative Models</h3>
+            <p class="text-stone-700 mb-4">
+                Diffusion models offer unique trade-offs compared to GANs, VAEs, and Autoregressive Models (ARMs). The chart below provides a qualitative comparison across several dimensions.
+            </p>
+            <div class="card">
+                <div class="chart-container">
+                    <canvas id="generativeModelsComparisonChart"></canvas>
+                </div>
+            </div>
+             <p class="text-xs text-stone-500 mt-2 text-center">Hover over points or labels for more details. Ratings are qualitative based on general characteristics from the report.</p>
+        </section>
+
+        <section id="diffusion-for-text" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Adapting Diffusion for Text</h2>
+            <p class="text-stone-700 mb-6">
+                Applying diffusion models to discrete text data presents unique challenges, such as the discrete nature of tokens, variable sequence lengths, and maintaining semantic coherence. Researchers have developed several key strategies to address these.
+            </p>
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="card">
+                    <h4 class="font-semibold text-xl mb-2 text-teal-700">Continuous Embeddings & Rounding</h4>
+                    <p class="text-stone-600 text-sm">Discrete tokens are mapped to a continuous embedding space where diffusion occurs. Denoised continuous vectors are then "rounded" back to tokens. Example: Diffusion-LM.</p>
+                </div>
+                <div class="card">
+                    <h4 class="font-semibold text-xl mb-2 text-teal-700">Masking Techniques</h4>
+                    <p class="text-stone-600 text-sm">Inspired by models like BERT, tokens are randomly "masked" in the forward process. The reverse process trains a model (often a Transformer) to predict the original masked tokens. Example: LLaDA.</p>
+                </div>
+                <div class="card">
+                    <h4 class="font-semibold text-xl mb-2 text-teal-700">Discrete State-Space Models</h4>
+                    <p class="text-stone-600 text-sm">Diffusion is defined directly on discrete tokens using transition matrices for corruption (e.g., D3PMs) or allowing generation in any order (e.g., ARDMs).</p>
+                </div>
+                <div class="card">
+                    <h4 class="font-semibold text-xl mb-2 text-teal-700">Latent Diffusion for Language</h4>
+                    <p class="text-stone-600 text-sm">Diffusion occurs in a compressed, continuous latent space learned by a pre-trained autoencoder (like VQ-VAE), reducing computational load.</p>
+                </div>
+                 <div class="card">
+                    <h4 class="font-semibold text-xl mb-2 text-teal-700">Architectural Backbone</h4>
+                    <p class="text-stone-600 text-sm">Many text diffusion models use Transformer architectures, often with non-causal attention masks to leverage bidirectional context, unlike autoregressive LLMs.</p>
+                </div>
+                 <div class="card">
+                    <h4 class="font-semibold text-xl mb-2 text-teal-700">Addressing ARM Limitations</h4>
+                    <p class="text-stone-600 text-sm">Diffusion LLMs aim to tackle issues like slow sequential inference and control difficulties in ARMs, with potential for faster, more controllable generation and in-process error correction.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="research-models" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Landmark Research & Notable Models</h2>
+            <p class="text-stone-700 mb-6">
+                The field of diffusion models has been built upon seminal papers and has seen the emergence of innovative LLM architectures. Explore some of the key contributions below.
+            </p>
+            <div class="mb-6">
+                <button id="tab-papers" class="tab-button active">Foundational Papers</button>
+                <button id="tab-models" class="tab-button">Notable Diffusion LLMs</button>
+            </div>
+
+            <div id="content-papers" class="tab-content">
+                <div class="mb-4 flex items-center space-x-2">
+                    <span class="font-medium text-stone-700">Filter by Year:</span>
+                    <button class="filter-button active-filter" data-year="all" data-type="paper">All</button>
+                    <button class="filter-button" data-year="2015" data-type="paper">2015</button>
+                    <button class="filter-button" data-year="2019" data-type="paper">2019</button>
+                    <button class="filter-button" data-year="2020" data-type="paper">2020</button>
+                    <button class="filter-button" data-year="2021" data-type="paper">2021</button>
+                    <button class="filter-button" data-year="2022" data-type="paper">2022</button>
+                </div>
+                <div id="papers-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                </div>
+            </div>
+
+            <div id="content-models" class="tab-content hidden">
+                 <p class="text-stone-600 mb-4">Explore some of the prominent Diffusion LLM architectures that are pushing the boundaries of text generation.</p>
+                <div id="models-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                </div>
+            </div>
+        </section>
+
+        <section id="control-conditioning" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Under the Hood: Control & Conditioning</h2>
+            <p class="text-stone-700 mb-6">
+                A key strength of diffusion models is their potential for controllable generation. This involves integrating textual prompts and guiding the denoising process towards desired attributes.
+            </p>
+            <div class="grid md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="subsection-title">Textual Conditioning</h3>
+                    <p class="text-stone-600 mb-2">Models are guided by text prompts using:</p>
+                    <ul class="list-disc list-inside space-y-1 text-stone-600">
+                        <li><strong>Text Embeddings:</strong> Prompts are encoded into numerical representations (e.g., by CLIP or BERT).</li>
+                        <li><strong>Cross-Attention Layers:</strong> These allow the diffusion model to attend to prompt embeddings during denoising, aligning generation with semantics.</li>
+                        <li><strong>Powerful LLM Encoders:</strong> Using advanced LLMs (e.g., via LLMDiff-Adapter) for richer semantic understanding from prompts.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="subsection-title">Guiding Generation: Conceptual Example</h3>
+                    <p class="text-stone-600 mb-2">Techniques like Classifier Guidance, Classifier-Free Guidance (CFG), or LinearAcT steer generation. Imagine controlling text sentiment:</p>
+                    <div class="card">
+                        <p class="mb-2 font-medium">Original Idea: <span id="control-original-text" class="italic">A new AI model was released.</span></p>
+                        <p class="mb-2">Controlled Output: <span id="control-output-text" class="font-semibold text-teal-700 italic">A new AI model was released.</span></p>
+                        <div class="mt-3 space-x-2">
+                            <button class="control-btn px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600" data-sentiment="positive">Make Positive</button>
+                            <button class="control-btn px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600" data-sentiment="negative">Make Negative</button>
+                            <button class="control-btn px-3 py-1 bg-stone-500 text-white rounded hover:bg-stone-600" data-sentiment="neutral">Reset</button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-stone-500 mt-2">This is a conceptual illustration. Real control is more complex and involves guiding the model's internal generation process.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="evaluation" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">The Evaluation Landscape</h2>
+            <p class="text-stone-700 mb-6">
+                Assessing Diffusion LLMs involves a variety of benchmarks and metrics to cover quality, coherence, diversity, and task-specific performance. No single metric is perfect, so a suite is often used.
+            </p>
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="metrics-grid">
+            </div>
+        </section>
+
+        <section id="challenges-future" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Challenges & The Road Ahead</h2>
+            <p class="text-stone-700 mb-6">
+                Diffusion LLMs show immense promise but also face significant challenges. Ongoing research aims to address these and unlock new capabilities.
+            </p>
+            <div class="grid md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="subsection-title">Key Challenges</h3>
+                    <ul class="list-disc list-inside space-y-2 text-stone-600">
+                        <li><strong>Computational Efficiency:</strong> High training costs and slow inference speeds due to iterative sampling.</li>
+                        <li><strong>Control & Alignment:</strong> Achieving precise, reliable control and aligning outputs with complex user intent.</li>
+                        <li><strong>Bias Mitigation:</strong> Preventing amplification of societal biases from training data.</li>
+                        <li><strong>Scalability:</strong> Scaling to the size of the largest ARMs while maintaining stability and performance.</li>
+                        <li><strong>Text-Specific Issues:</strong> Handling variable lengths effectively and optimizing discrete vs. continuous representations.</li>
+                         <li><strong>Factual Accuracy:</strong> Minimizing "hallucinations" and ensuring generated text is factually correct.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="subsection-title">Future Directions</h3>
+                    <ul class="list-disc list-inside space-y-2 text-stone-600">
+                        <li><strong>Hybrid Models:</strong> Combining diffusion with other architectures (e.g., autoencoders, ARMs).</li>
+                        <li><strong>Enhanced Sampling Efficiency:</strong> Developing faster samplers and distillation techniques.</li>
+                        <li><strong>Advanced Controllability & Editability:</strong> More intuitive and fine-grained control, leveraging iterative refinement for editing.</li>
+                        <li><strong>Reasoning & Agentic Capabilities:</strong> Exploring how non-sequential processing can support complex reasoning.</li>
+                        <li><strong>Multi-modality:</strong> Extending to seamlessly generate and understand text, images, audio, and video.</li>
+                        <li><strong>Ethical AI & RL Alignment:</strong> Addressing ethical concerns and using reinforcement learning for better alignment.</li>
+                    </ul>
+                </div>
+            </div>
+            <p class="mt-6 text-stone-600">The non-autoregressive, iterative nature of diffusion models may unlock capabilities difficult for traditional ARMs, such as true in-place text editing and novel reasoning paradigms.</p>
+        </section>
+
+        <section id="resources" class="pt-16 -mt-16 mb-12">
+            <h2 class="section-title">Dive Deeper: Learning Resources</h2>
+            <p class="text-stone-700 mb-6">
+                Explore these resources to further your understanding of Diffusion LLMs.
+            </p>
+            <div id="learning-resources-grid" class="grid md:grid-cols-2 gap-6">
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-stone-800 text-stone-300 py-8 text-center">
+        <p>© 2024 Interactive Guide to Diffusion LLMs. Information based on the provided research report.</p>
+        <p class="text-xs mt-1">This is a conceptual SPA for informational purposes. Gemini API features require a valid API key and are for demonstration.</p>
+    </footer>
+
+    <div id="gemini-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="gemini-modal-title" class="modal-title">Gemini AI Response</h3>
+            <div id="gemini-modal-body" class="modal-body">
+                <div class="loader"></div>
+            </div>
+            <button id="gemini-modal-close-btn" class="modal-close-btn">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const GEMINI_API_KEY = ""; 
+
+        const foundationalPapersData = [
+            { id: "paper1", year: 2015, title: "Deep Unsupervised Learning using Nonequilibrium Thermodynamics", authors: "Sohl-Dickstein, J.", contribution: "Introduced diffusion probabilistic models. (Theoretical groundwork)", link: "http://proceedings.mlr.press/v37/sohl-dickstein15.html" },
+            { id: "paper2", year: 2020, title: "Denoising Diffusion Probabilistic Models (DDPM)", authors: "Ho, J.", contribution: "Popularized diffusion models, improved performance, simplified training.", link: "https://arxiv.org/abs/2006.11239" },
+            { id: "paper3", year: 2019, title: "Generative Modeling by Estimating Gradients of the Data Distribution", authors: "Song, Y. & Ermon, S.", contribution: "Proposed score-based generative modeling (NCSN).", link: "https://papers.nips.cc/paper/2019/hash/3001ef257407d5a405183512aasketch1e31-Abstract.html" },
+            { id: "paper4", year: 2020, title: "Score-Based Generative Modeling through Stochastic Differential Equations", authors: "Song, Y. et al.", contribution: "Unified DDPMs and score-based models via SDEs.", link: "https://arxiv.org/abs/2011.13456" },
+            { id: "paper5", year: 2021, title: "Improved Denoising Diffusion Probabilistic Models", authors: "Nichol, A. & Dhariwal, P.", contribution: "Improved DDPM log-likelihoods, sample quality, and sampling speed.", link: "http://arxiv.org/abs/2102.09672" },
+            { id: "paper6", year: 2021, title: "Diffusion Models Beat GANs on Image Synthesis", authors: "Dhariwal, P. & Nichol, A.", contribution: "Showed diffusion models surpass GANs in image quality.", link: "https://arxiv.org/abs/2105.05233" },
+            { id: "paper7", year: 2021, title: "Argmax Flows and Multinomial Diffusion", authors: "Hoogeboom, E. et al.", contribution: "Introduced multinomial diffusion for discrete data.", link: "https://arxiv.org/abs/2102.05379" },
+            { id: "paper8", year: 2022, title: "Autoregressive Diffusion Models (ARDM)", authors: "Hoogeboom, E. et al.", contribution: "ARDMs generalize order-agnostic AR and absorbing diffusion.", link: "https://arxiv.org/abs/2110.02037" },
+            { id: "paper9", year: 2021, title: "Structured Denoising Diffusion Models in Discrete State-Spaces (D3PM)", authors: "Austin, J. et al.", contribution: "Generalized discrete diffusion with structured transition matrices.", link: "https://arxiv.org/abs/2107.03006" },
+            { id: "paper10", year: 2022, title: "Diffusion-LM Improves Controllable Text Generation", authors: "Li, X. L. et al.", contribution: "Applied continuous diffusion to text with gradient-based control.", link: "https://arxiv.org/abs/2205.14217" }
+        ];
+
+        const notableModelsData = [
+            { name: "LLaDA 8B", innovation: "Masked diffusion (forward masking, reverse prediction with non-causal Transformer).", performance: "Competitive with LLaMA3 8B on MMLU, GSM8K; surpasses GPT-4o on reversal poem task.", linkName: "arXiv:2502.09992", linkUrl: "https://arxiv.org/abs/2502.09992" },
+            { name: "Google Gemini Diffusion", innovation: "Iterative refinement of noise into text blocks, full context consideration, error correction.", performance: "1,479 tokens/sec avg. Strong on some code/math (AIME 2025).", linkName: "DeepMind Blog", linkUrl: "https://deepmind.google/discover/blog/gemini-15-stretching-the-boundaries-of-multimodality/" },
+            { name: "Inception Labs Mercury Coder", innovation: "Commercial-scale diffusion LLM, parallel processing for speed.", performance: "Claims up to 10,000 tokens/sec. Rivals Gemini 2.0, GPT-40 mini.", linkName: "Inception Labs (Conceptual)", linkUrl: "#" },
+            { name: "EDLM", innovation: "Energy-Based Model at full sequence level for each diffusion step.", performance: "Outperforms prior diffusion models, approaches ARM perplexity. 1.3x sampling speedup.", linkName: "arXiv:2410.21357", linkUrl: "https://arxiv.org/abs/2410.21357" },
+            { name: "LLMDiff-Adapter (for T2I)", innovation: "Uses decoder-only LLMs as text controllers for diffusion models via an adapter.", performance: "Superior image detail, logical coherence in T2I.", linkName: "arXiv:2502.04412", linkUrl: "https://arxiv.org/abs/2502.04412" },
+            { name: "Diffusion-LM", innovation: "Continuous diffusion on word embeddings, gradient-based control.", performance: "Effective controllable text generation (e.g., syntactic structure).", linkName: "arXiv:2205.14217", linkUrl: "https://arxiv.org/abs/2205.14217" }
+        ];
+
+        const metricsData = [
+            { name: "Perplexity (PPL)", measures: "Fluency, predictability of text.", pros: "Standard for LM quality.", cons: "Doesn't always correlate with human judgment." },
+            { name: "BLEU", measures: "N-gram precision overlap with reference(s).", pros: "Useful for MT.", cons: "Penalizes diversity, poor for open-ended." },
+            { name: "ROUGE", measures: "N-gram recall overlap (esp. ROUGE-L for LCS).", pros: "Good for summarization.", cons: "Similar limits to BLEU." },
+            { name: "BERTScore", measures: "Semantic similarity via contextual embeddings.", pros: "Captures semantics better.", cons: "Computationally intensive." },
+            { name: "Human Evaluation", measures: "Overall quality, coherence, relevance, etc.", pros: "Gold standard for nuanced assessment.", cons: "Costly, subjective." },
+            { name: "Task-Specific Accuracy (Pass@1)", measures: "Correctness on tasks like code gen, math.", pros: "Direct measure of problem-solving.", cons: "Task-specific." }
+        ];
+
+        const learningResourcesData = [
+            { type: "Survey Paper", title: "Diffusion Models in NLP: A Survey", source: "Zhu & Zhao", link: "https://arxiv.org/abs/2303.07576", relevance: "Overview of diffusion theory and NLP applications (text gen, T2I) up to early 2023." },
+            { type: "Survey Paper", title: "An Introduction for Applied Mathematicians", source: "Higham et al.", link: "https://arxiv.org/abs/2312.14977", relevance: "Mathematical introduction to diffusion models (image-focused but foundational)." },
+            { type: "Book (Upcoming)", title: "Practical Diffusion Models for NLP", source: "Elbert Gale", link: "#", relevance: "Dedicated hands-on guide to theory, implementation, and applications." },
+            { type: "Lecture Video", title: "Advancing Diffusion Models for Text Generation", source: "Kilian Weinberger (Simons Institute)", link: "https://www.youtube.com/watch?v=klW65MWJ1PY", relevance: "Explores adapting DDMs to text, latent diffusion, hybrid models." },
+            { type: "GitHub Repo", title: "Awesome-Text-Diffusion-Models", source: "AoiDragon", link: "https://github.com/AoiDragon/Awesome-Text-Diffusion-Models", relevance: "Curated list of papers and code for text diffusion models." },
+            { type: "GitHub Repo", title: "LLaDA (Large Language Diffusion with mAsking)", source: "ML-GSAI", link: "https://github.com/ML-GSAI/LLaDA", relevance: "Code for LLaDA model inference, evaluation, and training." }
+        ];
+
+        function populateGrid(containerId, data, cardGenerator) {
+            const grid = document.getElementById(containerId);
+            if (!grid) return;
+            grid.innerHTML = '';
+            data.forEach(item => {
+                const cardElement = cardGenerator(item);
+                grid.appendChild(cardElement);
+            });
+            addCardToggleListeners();
+            addGeminiButtonListeners();
+        }
+        
+        function createPaperCard(paper) {
+            const card = document.createElement('div');
+            card.className = 'card card-hover paper-card';
+            card.dataset.year = paper.year;
+            card.dataset.id = paper.id;
+            card.innerHTML = `
+                <h4 class="font-semibold text-lg mb-1 text-teal-700">${paper.title} (${paper.year})</h4>
+                <p class="text-xs text-stone-500 mb-2">By ${paper.authors}</p>
+                <div class="flex flex-wrap items-center">
+                    <button class="text-sm text-sky-600 hover:text-sky-700 font-medium toggle-details-btn mr-2">Show Details ▼</button>
+                    <button class="gemini-button summarize-paper-btn" data-paper-id="${paper.id}">✨ Quick Summary</button>
+                </div>
+                <div class="details mt-2">
+                    <p class="text-sm text-stone-600 mb-2">${paper.contribution}</p>
+                    <a href="${paper.link}" target="_blank" rel="noopener noreferrer" class="text-sm text-teal-600 hover:underline">Read Paper →</a>
+                </div>
+            `;
+            return card;
+        }
+
+        function createModelCard(model) {
+            const card = document.createElement('div');
+            card.className = 'card card-hover model-card';
+            card.innerHTML = `
+                <h4 class="font-semibold text-lg mb-1 text-teal-700">${model.name}</h4>
+                <button class="text-sm text-sky-600 hover:text-sky-700 font-medium toggle-details-btn">Show Details ▼</button>
+                <div class="details mt-2">
+                    <p class="text-sm text-stone-600 mb-1"><strong>Key Innovation:</strong> ${model.innovation}</p>
+                    <p class="text-sm text-stone-600 mb-2"><strong>Performance Highlight:</strong> ${model.performance}</p>
+                    <a href="${model.linkUrl}" target="_blank" rel="noopener noreferrer" class="text-sm text-teal-600 hover:underline">Learn More (${model.linkName}) →</a>
+                </div>
+            `;
+            return card;
+        }
+        
+        function createMetricCard(metric) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <h4 class="font-semibold text-lg mb-1 text-teal-700">${metric.name}</h4>
+                <p class="text-sm text-stone-600 mb-1"><strong>Measures:</strong> ${metric.measures}</p>
+                <p class="text-sm text-stone-600 mb-1"><strong>Pros:</strong> ${metric.pros}</p>
+                <p class="text-sm text-stone-600"><strong>Cons:</strong> ${metric.cons}</p>
+            `;
+            return card;
+        }
+
+        function createResourceCard(resource) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <h4 class="font-semibold text-lg mb-1 text-teal-700">${resource.title}</h4>
+                <p class="text-xs text-stone-500 mb-1">Type: ${resource.type} | Source: ${resource.source}</p>
+                <p class="text-sm text-stone-600 mb-2">${resource.relevance}</p>
+                <a href="${resource.link}" target="_blank" rel="noopener noreferrer" class="text-sm text-teal-600 hover:underline">Access Resource →</a>
+            `;
+            return card;
+        }
+
+        function addCardToggleListeners() {
+            document.querySelectorAll('.toggle-details-btn').forEach(button => {
+                button.removeEventListener('click', toggleCardDetails); 
+                button.addEventListener('click', toggleCardDetails);
+            });
+        }
+
+        function toggleCardDetails(event) {
+            const detailsDiv = event.target.closest('.card').querySelector('.details');
+            if (detailsDiv) {
+                detailsDiv.classList.toggle('open');
+                event.target.textContent = detailsDiv.classList.contains('open') ? 'Hide Details ▲' : 'Show Details ▼';
+            }
+        }
+        
+        const geminiModal = document.getElementById('gemini-modal');
+        const geminiModalTitle = document.getElementById('gemini-modal-title');
+        const geminiModalBody = document.getElementById('gemini-modal-body');
+        const geminiModalCloseBtn = document.getElementById('gemini-modal-close-btn');
+
+        geminiModalCloseBtn.addEventListener('click', () => {
+            geminiModal.classList.add('hidden');
+        });
+
+        async function callGeminiAPI(promptText) {
+            if (!GEMINI_API_KEY) {
+                return "Error: GEMINI_API_KEY is not set. Please configure it in the script.";
+            }
+
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptText }] }],
+                        generationConfig: {
+                            temperature: 0.7,
+                            topK: 1,
+                            topP: 1,
+                            maxOutputTokens: 256,
+                        }
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Gemini API Error:', errorData);
+                    return `Error calling Gemini API: ${errorData.error?.message || response.statusText}`;
+                }
+
+                const data = await response.json();
+                if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
+                    return data.candidates[0].content.parts[0].text;
+                } else {
+                    return "No content received from Gemini API or unexpected response structure.";
+                }
+            } catch (error) {
+                console.error('Error fetching from Gemini API:', error);
+                return `Network or other error: ${error.message}`;
+            }
+        }
+
+        function showGeminiModal(title, bodyContent) {
+            geminiModalTitle.textContent = title;
+            geminiModalBody.innerHTML = bodyContent; 
+            geminiModal.classList.remove('hidden');
+        }
+
+        function addGeminiButtonListeners() {
+            document.querySelectorAll('.explain-concept-btn').forEach(button => {
+                button.removeEventListener('click', handleExplainConcept);
+                button.addEventListener('click', handleExplainConcept);
+            });
+            document.querySelectorAll('.summarize-paper-btn').forEach(button => {
+                button.removeEventListener('click', handleSummarizePaper);
+                button.addEventListener('click', handleSummarizePaper);
+            });
+        }
+
+        async function handleExplainConcept(event) {
+            const conceptId = event.target.dataset.conceptId;
+            const conceptName = event.target.dataset.conceptName;
+            const conceptElement = document.getElementById(conceptId);
+            if (!conceptElement) return;
+
+            const originalText = conceptElement.innerText.replace("✨ Explain Simply", "").trim();
+            
+            showGeminiModal(`Explaining: ${conceptName}`, '<div class="loader"></div>');
+            const prompt = `Explain the following concept about diffusion models in simple terms for someone new to AI, in about 3-4 concise sentences:\n\n"${originalText}"`;
+            const explanation = await callGeminiAPI(prompt);
+            geminiModalBody.textContent = explanation;
+        }
+        
+        async function handleSummarizePaper(event) {
+            const paperId = event.target.dataset.paperId;
+            const paper = foundationalPapersData.find(p => p.id === paperId);
+            if (!paper) return;
+
+            showGeminiModal(`Summarizing: ${paper.title}`, '<div class="loader"></div>');
+            const prompt = `Provide a concise 2-3 sentence summary of the following research paper, highlighting its key contribution and impact:\n\nTitle: "${paper.title}"\nAuthors: ${paper.authors}\nContribution: "${paper.contribution}"`;
+            const summary = await callGeminiAPI(prompt);
+            geminiModalBody.textContent = summary;
+        }
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+            populateGrid('papers-grid', foundationalPapersData, createPaperCard);
+            populateGrid('models-grid', notableModelsData, createModelCard);
+            populateGrid('metrics-grid', metricsData, createMetricCard);
+            populateGrid('learning-resources-grid', learningResourcesData, createResourceCard);
+
+            const tabPapers = document.getElementById('tab-papers');
+            const tabModels = document.getElementById('tab-models');
+            const contentPapers = document.getElementById('content-papers');
+            const contentModels = document.getElementById('content-models');
+
+            if (tabPapers && tabModels && contentPapers && contentModels) {
+                tabPapers.addEventListener('click', () => {
+                    tabPapers.classList.add('active');
+                    tabModels.classList.remove('active');
+                    contentPapers.classList.remove('hidden');
+                    contentModels.classList.add('hidden');
+                });
+
+                tabModels.addEventListener('click', () => {
+                    tabModels.classList.add('active');
+                    tabPapers.classList.remove('active');
+                    contentModels.classList.remove('hidden');
+                    contentPapers.classList.add('hidden');
+                });
+            }
+            
+            document.querySelectorAll('.filter-button[data-type="paper"]').forEach(button => {
+                button.addEventListener('click', function() {
+                    document.querySelectorAll('.filter-button[data-type="paper"]').forEach(btn => btn.classList.remove('active-filter', 'bg-sky-700'));
+                    this.classList.add('active-filter', 'bg-sky-700');
+                    
+                    const year = this.dataset.year;
+                    let filteredData = foundationalPapersData;
+                    if (year !== 'all') {
+                        filteredData = foundationalPapersData.filter(item => item.year.toString() === year);
+                    }
+                    populateGrid('papers-grid', filteredData, createPaperCard);
+                });
+            });
+            
+            const controlOriginalTextEl = document.getElementById('control-original-text');
+            const controlOutputTextEl = document.getElementById('control-output-text');
+            if (controlOriginalTextEl && controlOutputTextEl) {
+                const controlOriginalText = controlOriginalTextEl.textContent;
+                document.querySelectorAll('.control-btn').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const sentiment = this.dataset.sentiment;
+                        if (sentiment === 'positive') {
+                            controlOutputTextEl.textContent = "A wonderful new AI model was released, showing great promise!";
+                            controlOutputTextEl.className = "font-semibold text-green-700 italic";
+                        } else if (sentiment === 'negative') {
+                            controlOutputTextEl.textContent = "Yet another AI model was released, with questionable utility.";
+                            controlOutputTextEl.className = "font-semibold text-red-700 italic";
+                        } else {
+                            controlOutputTextEl.textContent = controlOriginalText;
+                            controlOutputTextEl.className = "font-semibold text-teal-700 italic";
+                        }
+                    });
+                });
+            }
+
+
+            const comparisonChartCtx = document.getElementById('generativeModelsComparisonChart').getContext('2d');
+            if (comparisonChartCtx) {
+                new Chart(comparisonChartCtx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Sample Quality', 'Training Stability', 'Mode Coverage', 'Inference Speed (Typical)', 'Controllability', 'Data Efficiency'],
+                        datasets: [
+                            {
+                                label: 'Diffusion Models',
+                                data: [9, 8, 8, 4, 8, 5],
+                                fill: true,
+                                backgroundColor: 'rgba(20, 184, 166, 0.2)', 
+                                borderColor: 'rgb(13, 148, 136)', 
+                                pointBackgroundColor: 'rgb(13, 148, 136)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgb(13, 148, 136)'
+                            },
+                            {
+                                label: 'GANs',
+                                data: [9, 3, 5, 8, 5, 7],
+                                fill: true,
+                                backgroundColor: 'rgba(239, 68, 68, 0.2)', 
+                                borderColor: 'rgb(220, 38, 38)', 
+                                pointBackgroundColor: 'rgb(220, 38, 38)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgb(220, 38, 38)'
+                            },
+                            {
+                                label: 'VAEs',
+                                data: [6, 8, 6, 8, 6, 7],
+                                fill: true,
+                                backgroundColor: 'rgba(59, 130, 246, 0.2)', 
+                                borderColor: 'rgb(37, 99, 235)', 
+                                pointBackgroundColor: 'rgb(37, 99, 235)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgb(37, 99, 235)'
+                            },
+                            {
+                                label: 'ARMs',
+                                data: [8, 8, 8, 6, 7, 6],
+                                fill: true,
+                                backgroundColor: 'rgba(245, 158, 11, 0.2)', 
+                                borderColor: 'rgb(217, 119, 6)', 
+                                pointBackgroundColor: 'rgb(217, 119, 6)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgb(217, 119, 6)'
+                            }
+                        ]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        scales: {
+                            r: {
+                                angleLines: { display: true },
+                                suggestedMin: 0,
+                                suggestedMax: 10,
+                                ticks: { stepSize: 2, backdropColor: 'rgba(0,0,0,0)' },
+                                pointLabels: { font: { size: 10 } }
+                            }
+                        },
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) { label += ': '; }
+                                        if (context.parsed.r !== null) {
+                                            label += context.parsed.r;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+
+            const animateDiffusionBtn = document.getElementById('animate-diffusion-btn');
+            const forwardAnimEl = document.getElementById('forward-process-animation');
+            const reverseAnimEl = document.getElementById('reverse-process-animation');
+            let animationRunning = false;
+
+            const forwardSteps = ["Original Text", "T#xt w. Noise", "Tx* w. M#re Ns", "T*x# w. Even Mr Ns", "Pure Noise"];
+            const reverseSteps = ["Pure Noise", "Slightly Denoised", "More Denoised", "Nearly Clean Text", "Generated Text"];
+            
+            function runAnimationStep(element, steps, currentStep, onComplete) {
+                if (currentStep < steps.length) {
+                    element.textContent = steps[currentStep];
+                    setTimeout(() => runAnimationStep(element, steps, currentStep + 1, onComplete), 700);
+                } else {
+                    if (onComplete) onComplete();
+                }
+            }
+            
+            if(animateDiffusionBtn && forwardAnimEl && reverseAnimEl) {
+                animateDiffusionBtn.addEventListener('click', () => {
+                    if (animationRunning) return;
+                    animationRunning = true;
+                    animateDiffusionBtn.disabled = true;
+                    animateDiffusionBtn.textContent = "Animating...";
+
+                    runAnimationStep(forwardAnimEl, forwardSteps, 0, () => {
+                        runAnimationStep(reverseAnimEl, reverseSteps, 0, () => {
+                            animationRunning = false;
+                            animateDiffusionBtn.disabled = false;
+                            animateDiffusionBtn.textContent = "Run Animation";
+                        });
+                    });
+                });
+            }
+
+
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            if (mobileMenuButton && mobileMenu) {
+                mobileMenuButton.addEventListener('click', () => {
+                    mobileMenu.classList.toggle('hidden');
+                });
+                mobileMenu.addEventListener('click', (e) => { 
+                    if (e.target.tagName === 'A') {
+                        mobileMenu.classList.add('hidden');
+                    }
+                });
+            }
+
+
+            const navLinks = document.querySelectorAll('#desktop-nav .nav-link');
+            const sections = document.querySelectorAll('main section');
+
+            function changeActiveLink() {
+                let index = sections.length;
+                const offset = window.innerHeight * 0.3; 
+                while(--index >= 0 && window.scrollY + offset < sections[index].offsetTop) {}
+                
+                navLinks.forEach((link) => link.classList.remove('active-link'));
+                if (navLinks[index]) {
+                     navLinks[index].classList.add('active-link');
+                } else if (index < 0 && navLinks.length > 0) { 
+                    navLinks[0].classList.add('active-link');
+                }
+            }
+            if (navLinks.length > 0 && sections.length > 0) {
+                changeActiveLink(); 
+                window.addEventListener('scroll', changeActiveLink);
+            }
+            
+            addGeminiButtonListeners(); 
+
+        });
+    </script>
+</body>
+</html>
